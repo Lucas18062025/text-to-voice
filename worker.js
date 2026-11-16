@@ -20,14 +20,28 @@ export default {
 
       const target = new URL(url.pathname + url.search, origin);
       try {
-        return await fetch(target.toString(), request);
+        // 90 s: cubre el cold start de un free tier (~40-50 s).
+        // Sin timeout, un origen inexistente cuelga hasta que Cloudflare
+        // mata la invocación y devuelve un 502 genérico sin explicación.
+        return await fetch(target.toString(), {
+          method: request.method,
+          headers: request.headers,
+          body:
+            request.method === "GET" || request.method === "HEAD"
+              ? undefined
+              : request.body,
+          signal: AbortSignal.timeout(90000),
+        });
       } catch (error) {
+        const timedOut =
+          error?.name === "TimeoutError" || error?.name === "AbortError";
         return Response.json(
           {
-            detail:
-              "No pude contactar el backend. Si está en free tier puede " +
-              "estar arrancando: reintentá en ~40 s.",
-            error: String(error),
+            detail: timedOut
+              ? `El backend en ${origin} no respondió en 90 s. ` +
+                "Si está en free tier puede estar arrancando: reintentá en ~40 s. " +
+                "Si nunca responde, API_ORIGIN apunta a un host inexistente."
+              : `No pude contactar el backend en ${origin}: ${String(error)}`,
           },
           { status: 502 },
         );
