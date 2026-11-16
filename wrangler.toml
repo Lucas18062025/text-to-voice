@@ -7,11 +7,13 @@ compatibility_date = "2026-11-01"
 directory = "./web"
 binding = "ASSETS"
 
-# Backend Python. Reemplazar por la URL real de Render/Fly/Koyeb.
-# También se puede setear sin tocar este archivo:
-#   npx wrangler deploy --var API_ORIGIN:https://tu-backend.onrender.com
+# Backend Python que ejecuta la sintesis (edge-tts): Render, Fly, Koyeb
+# o un tunel de cloudflared. Vacio = el Worker responde un 500 con mensaje
+# claro en /api/* en vez de colgarse esperando un host inexistente.
+# Se setea al deployar, sin modificar este archivo:
+#   .\deploy-cloudflare.ps1 -ApiOrigin https://tu-backend
 [vars]
-API_ORIGIN = "https://text-to-voice-api.onrender.com"
+API_ORIGIN = ""
 
 # Mantiene despierto el backend de free tier.
 [triggers]

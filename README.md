@@ -7,6 +7,10 @@ Convertí texto en voz. Hoy hay dos caminos en el repo:
 | **Fase 1 — App local** | UI web: escribís, elegís voz (femenina/masculina), escuchás y bajás el MP3 | Demo, uso personal, validar la experiencia |
 | **Fase 2 — Serverless** | Subís un `.txt` a S3 y una Lambda lo convierte con Polly y avisa por SNS | Procesamiento por lotes en AWS |
 
+**Deploy:** <https://text-to-voice.lucaslean1806.workers.dev> — Worker en
+Cloudflare (UI + proxy) y la síntesis en Python detrás
+([cómo está armado](#deploy-cloudflare-ui--proxy--backend-python)).
+
 ---
 
 ## Fase 1 — App local (UI web)
@@ -46,6 +50,8 @@ web/index.html   # UI (HTML/CSS/JS, sin dependencias ni CDN)
 app.py           # FastAPI: /, /api/voices, /api/tts, /api/health
 tts_engine.py    # catálogo de voces + motores (edge / polly)
 run.ps1          # levanta el server y abre el navegador
+worker.js        # Worker de Cloudflare: assets + proxy /api/*
+demo.ps1         # backend + túnel + deploy + verificación (una sola orden)
 ```
 
 La UI no sabe qué motor hay detrás: pide `/api/voices` y publica
@@ -81,43 +87,74 @@ Errores: `400` texto vacío o voz inválida, `413` texto demasiado largo
 
 ---
 
-## Deploy: Cloudflare (UI) + Render (backend)
+## Deploy: Cloudflare (UI + proxy) + backend Python
 
 ```
-[Browser] -> Worker (assets + proxy /api/*) -> Render (FastAPI + edge-tts) -> Microsoft
+[Browser] -> Worker (assets + proxy /api/*) -> FastAPI (edge-tts) -> Microsoft
 ```
 
 El Worker **no ejecuta Python**: sirve `web/` como assets y reenvía `/api/*`
 al backend. Como todo pasa por el mismo origen, la UI no cambia y no hace
-falta CORS.
+falta CORS. La URL del backend es `API_ORIGIN`, y se pasa al deployar: no se
+versiona.
 
-### 1. Backend en Render
+Sitio: <https://text-to-voice.lucaslean1806.workers.dev>
+
+### Opción A — Túnel a tu PC (demo en vivo, $0, sin cuentas nuevas)
+
+```powershell
+.\demo.ps1          # backend + túnel + deploy del Worker + verificación
+.\demo.ps1 -Stop    # apaga el backend y el túnel
+```
+
+`demo.ps1` es idempotente:
+
+1. Si `127.0.0.1:8000` ya responde `/api/health`, reusa ese backend.
+2. Abre un *quick tunnel* de `cloudflared` y extrae la URL `*.trycloudflare.com`.
+3. Verifica `/api/health` a través del túnel.
+4. Redeploya el Worker con esa URL (`deploy-cloudflare.ps1 -ApiOrigin <url>`).
+5. Verifica el sitio público y muestra las tres URLs.
+
+Requiere `cloudflared.exe` en `%USERPROFILE%\.local\bin` (binario portable,
+sin instalador ni permisos de administrador).
+
+| Limitación | Detalle |
+| --- | --- |
+| La URL del túnel **cambia en cada arranque** | Por eso redeployar es parte del arranque |
+| La **PC tiene que quedar prendida** | Si se apaga o suspende, `/api/*` devuelve 502 |
+| Latencia | El MP3 viaja: Microsoft → tu PC → Cloudflare → navegador |
+| No es producción | Demo sin SLA, sin auth, con el endpoint no oficial de `edge` |
+
+### Opción B — Backend 24/7 en Render (free)
 
 1. render.com → **New** → **Blueprint** → repo `text-to-voice` (usa `render.yaml`).
-2. Esperar el primer build y copiar la URL: `https://text-to-voice-api.onrender.com`.
-3. Verificar: `Invoke-RestMethod https://<url>/api/health` → `{"status":"ok",...}`.
+2. Copiar la URL que asigna, por ejemplo `https://text-to-voice-api.onrender.com`.
+3. `.\deploy-cloudflare.ps1 -ApiOrigin https://<esa-url>`
 
 Free tier duerme a los 15 min de inactividad; el primer request tarda ~40 s.
 El cron del Worker (`*/10 * * * *`) lo mantiene despierto.
 
-### 2. Worker en Cloudflare
+### Deploy del Worker
 
 ```powershell
 npx wrangler login      # una sola vez, abre el navegador
-.\deploy-cloudflare.ps1 -ApiOrigin https://text-to-voice-api.onrender.com
+.\deploy-cloudflare.ps1 -ApiOrigin https://<backend>
 ```
 
-El script escribe `API_ORIGIN` en `wrangler.toml` y corre `wrangler deploy`.
+El script pasa `API_ORIGIN` por CLI (`wrangler deploy --var API_ORIGIN:...`),
+así `wrangler.toml` queda con el valor vacío y la URL del túnel no ensucia el
+repo. Sin `API_ORIGIN`, `/api/*` responde un `500` con mensaje claro (en vez
+de colgarse 90 s y devolver un 502 opaco de Cloudflare).
 
-### 3. Verificación
+### Verificación
 
 ```powershell
-Invoke-RestMethod https://text-to-voice.<subdominio>.workers.dev/api/health
-Invoke-RestMethod https://text-to-voice.<subdominio>.workers.dev/api/voices
+Invoke-RestMethod https://text-to-voice.lucaslean1806.workers.dev/api/health
+Invoke-RestMethod https://text-to-voice.lucaslean1806.workers.dev/api/voices
 ```
 
-Ambas deben dar 200. Si `/api/health` da 502, el backend está arrancando
-(cold start) o `API_ORIGIN` apunta a otro lado.
+Ambas deben dar 200. Si `/api/health` da 502, el backend no está corriendo
+(túnel cerrado, PC dormida, `API_ORIGIN` viejo) o está en cold start.
 
 ### Otros hosts
 

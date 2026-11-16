@@ -1,5 +1,12 @@
-# Configura API_ORIGIN en wrangler.toml y despliega el Worker.
-# Uso: .\deploy-cloudflare.ps1 -ApiOrigin https://text-to-voice-api.onrender.com
+# Despliega el Worker apuntando /api/* a un backend Python.
+#
+# Uso:
+#   .\deploy-cloudflare.ps1 -ApiOrigin https://text-to-voice-api.onrender.com
+#   .\deploy-cloudflare.ps1 -ApiOrigin https://algo-random.trycloudflare.com
+#
+# No modifica wrangler.toml: la URL se pasa por CLI, asi el repo queda
+# limpio (la URL del tunel cambia en cada arranque).
+
 param(
     [Parameter(Mandatory = $true)]
     [string]$ApiOrigin
@@ -9,19 +16,9 @@ $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
 $origin = $ApiOrigin.TrimEnd('/')
-if (-not $origin.StartsWith('https://')) {
-    throw 'API_ORIGIN debe empezar con https://'
+if ($origin -notmatch '^https://[^/\s]+$') {
+    throw "API_ORIGIN debe ser un origen https:// sin path. Recibi: $ApiOrigin"
 }
 
-$content = Get-Content -LiteralPath 'wrangler.toml' -Raw
-$updated = [regex]::Replace(
-    $content,
-    'API_ORIGIN\s*=\s*"[^"]*"',
-    'API_ORIGIN = "' + $origin + '"'
-)
-if ($updated -ne $content) {
-    Set-Content -LiteralPath 'wrangler.toml' -Value $updated -NoNewline
-    Write-Host "API_ORIGIN = $origin" -ForegroundColor Cyan
-}
-
-npx --yes wrangler@latest deploy
+Write-Host "API_ORIGIN = $origin" -ForegroundColor Cyan
+npx --yes wrangler@latest deploy --var "API_ORIGIN:$origin"
