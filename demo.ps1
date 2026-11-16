@@ -16,21 +16,21 @@ $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 Set-Location $root
 
-$apiPort   = 8000
-$apiBase   = "http://127.0.0.1:$apiPort"
+$apiPort = 8000
+$apiBase = "http://127.0.0.1:$apiPort"
 $publicUrl = 'https://text-to-voice.lucaslean1806.workers.dev'
 
-$py         = Join-Path $root '.venv\Scripts\python.exe'
+$py = Join-Path $root '.venv\Scripts\python.exe'
 $cloudflared = Join-Path $env:USERPROFILE '.local\bin\cloudflared.exe'
 
-$demoDir   = Join-Path $root '.demo'
+$demoDir = Join-Path $root '.demo'
 $cfPidFile = Join-Path $demoDir 'cloudflared.pid'
 $uvPidFile = Join-Path $demoDir 'uvicorn.pid'
-$cfOut     = Join-Path $demoDir 'cloudflared.out'
-$cfErr     = Join-Path $demoDir 'cloudflared.err'
-$uvOut     = Join-Path $demoDir 'uvicorn.out'
-$uvErr     = Join-Path $demoDir 'uvicorn.err'
-$urlFile   = Join-Path $demoDir 'tunnel-url.txt'
+$cfOut = Join-Path $demoDir 'cloudflared.out'
+$cfErr = Join-Path $demoDir 'cloudflared.err'
+$uvOut = Join-Path $demoDir 'uvicorn.out'
+$uvErr = Join-Path $demoDir 'uvicorn.err'
+$urlFile = Join-Path $demoDir 'tunnel-url.txt'
 
 New-Item -ItemType Directory -Force $demoDir | Out-Null
 
@@ -57,7 +57,8 @@ function Test-ApiHealthy {
     try {
         $h = Invoke-RestMethod "$apiBase/api/health" -TimeoutSec 3
         return ($h.status -eq 'ok')
-    } catch { return $false }
+    }
+    catch { return $false }
 }
 
 function Test-PortOpen([int]$port) {
@@ -65,7 +66,8 @@ function Test-PortOpen([int]$port) {
     try {
         $client.Connect('127.0.0.1', $port)
         return $true
-    } catch { return $false }
+    }
+    catch { return $false }
     finally { $client.Dispose() }
 }
 
@@ -94,7 +96,8 @@ if ($Stop) {
 
     if ($stopped.Count -eq 0) {
         Write-Host 'No habia nada corriendo (o ya estaba apagado).' -ForegroundColor Yellow
-    } else {
+    }
+    else {
         foreach ($s in $stopped) { Write-Host "Detenido: $s" -ForegroundColor Green }
     }
 
@@ -116,9 +119,11 @@ Write-Host '=== text-to-voice · demo en vivo ===' -ForegroundColor Cyan
 # ------------------------------------------------------------- backend
 if (Test-ApiHealthy) {
     Write-Host "Backend ya estaba arriba en $apiBase (reuso, no lo apago despues)." -ForegroundColor Green
-} elseif (Test-PortOpen $apiPort) {
+}
+elseif (Test-PortOpen $apiPort) {
     throw "El puerto $apiPort esta ocupado por otro proceso y no responde /api/health. Cerralo y reintenta."
-} else {
+}
+else {
     Remove-Item -LiteralPath $uvOut, $uvErr -Force -ErrorAction SilentlyContinue
     $uv = Start-Process -FilePath $py `
         -ArgumentList '-m', 'uvicorn', 'app:app', '--host', '127.0.0.1', '--port', "$apiPort" `
@@ -177,7 +182,8 @@ for ($i = 0; $i -lt 40; $i++) {
     try {
         $h = Invoke-RestMethod "$tunnel/api/health" -TimeoutSec 8
         if ($h.status -eq 'ok') { $tunnelOk = $true; break }
-    } catch { }
+    }
+    catch { }
     Start-Sleep -Seconds 1
 }
 if (-not $tunnelOk) {
@@ -202,7 +208,8 @@ for ($i = 0; $i -lt 30; $i++) {
             $voices = @($v.voices).Count
             break
         }
-    } catch { }
+    }
+    catch { }
     Start-Sleep -Seconds 2
 }
 
@@ -215,7 +222,8 @@ Write-Host "  Tunel    $tunnel"
 Write-Host "  Publico  $publicUrl"
 if ($publicOk) {
     Write-Host "  Estado   OK · /api/health a traves de Cloudflare · $voices voces" -ForegroundColor Green
-} else {
+}
+else {
     Write-Host '  Estado   el deploy salio pero /api/health publico todavia no responde (espera ~10 s y recarga)' -ForegroundColor Yellow
 }
 Write-Host ''
