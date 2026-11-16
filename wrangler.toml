@@ -1,0 +1,21 @@
+name = "text-to-voice"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+
+# La UI se sirve desde ./web como assets estáticos.
+[assets]
+directory = "./web"
+binding = "ASSETS"
+
+# Backend Python. Reemplazar por la URL real de Render/Fly/Koyeb.
+# También se puede setear sin tocar este archivo:
+#   npx wrangler deploy --var API_ORIGIN:https://tu-backend.onrender.com
+[vars]
+API_ORIGIN = "https://text-to-voice-api.onrender.com"
+
+# Mantiene despierto el backend de free tier.
+[triggers]
+crons = ["*/10 * * * *"]
+
+[observability]
+enabled = true

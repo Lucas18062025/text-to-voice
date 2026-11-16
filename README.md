@@ -81,6 +81,51 @@ Errores: `400` texto vacío o voz inválida, `413` texto demasiado largo
 
 ---
 
+## Deploy: Cloudflare (UI) + Render (backend)
+
+```
+[Browser] -> Worker (assets + proxy /api/*) -> Render (FastAPI + edge-tts) -> Microsoft
+```
+
+El Worker **no ejecuta Python**: sirve `web/` como assets y reenvía `/api/*`
+al backend. Como todo pasa por el mismo origen, la UI no cambia y no hace
+falta CORS.
+
+### 1. Backend en Render
+
+1. render.com → **New** → **Blueprint** → repo `text-to-voice` (usa `render.yaml`).
+2. Esperar el primer build y copiar la URL: `https://text-to-voice-api.onrender.com`.
+3. Verificar: `Invoke-RestMethod https://<url>/api/health` → `{"status":"ok",...}`.
+
+Free tier duerme a los 15 min de inactividad; el primer request tarda ~40 s.
+El cron del Worker (`*/10 * * * *`) lo mantiene despierto.
+
+### 2. Worker en Cloudflare
+
+```powershell
+npx wrangler login      # una sola vez, abre el navegador
+.\deploy-cloudflare.ps1 -ApiOrigin https://text-to-voice-api.onrender.com
+```
+
+El script escribe `API_ORIGIN` en `wrangler.toml` y corre `wrangler deploy`.
+
+### 3. Verificación
+
+```powershell
+Invoke-RestMethod https://text-to-voice.<subdominio>.workers.dev/api/health
+Invoke-RestMethod https://text-to-voice.<subdominio>.workers.dev/api/voices
+```
+
+Ambas deben dar 200. Si `/api/health` da 502, el backend está arrancando
+(cold start) o `API_ORIGIN` apunta a otro lado.
+
+### Otros hosts
+
+`Dockerfile` incluido para Fly.io, Koyeb o cualquier host de contenedores:
+`docker build -t text-to-voice . && docker run -p 8000:8000 text-to-voice`.
+
+---
+
 ## Fase 2 — Serverless (S3 + Lambda + Polly + SNS)
 
 Subís un `.txt` a un bucket de S3 y, sin que nadie llame a nada a mano, una
