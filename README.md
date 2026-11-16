@@ -11,6 +11,8 @@ Convertí texto en voz. Hoy hay dos caminos en el repo:
 Cloudflare (UI + proxy) y la síntesis en Python detrás
 ([cómo está armado](#deploy-cloudflare-ui--proxy--backend-python)).
 
+![Radio DJ hablando al micrófono](Radio_DJ_speaking_into_microphone_fbadaeea_2K.jpg)
+
 ---
 
 ## Fase 1 — App local (UI web)
@@ -129,7 +131,7 @@ sin instalador ni permisos de administrador).
 
 1. render.com → **New** → **Blueprint** → repo `text-to-voice` (usa `render.yaml`).
 2. Copiar la URL que asigna, por ejemplo `https://text-to-voice-api.onrender.com`.
-3. `.\deploy-cloudflare.ps1 -ApiOrigin https://<esa-url>`
+3. `\.\deploy-cloudflare.ps1 -ApiOrigin https://<esa-url>`
 
 Free tier duerme a los 15 min de inactividad; el primer request tarda ~40 s.
 El cron del Worker (`*/10 * * * *`) lo mantiene despierto.
@@ -148,9 +150,12 @@ de colgarse 90 s y devolver un 502 opaco de Cloudflare).
 
 ### Verificación
 
+Las siguientes solicitudes son solo de lectura (`GET`):
+
 ```powershell
-Invoke-RestMethod https://text-to-voice.lucaslean1806.workers.dev/api/health
-Invoke-RestMethod https://text-to-voice.lucaslean1806.workers.dev/api/voices
+$baseUrl = 'https://text-to-voice.lucaslean1806.workers.dev'
+Invoke-RestMethod -Method Get -Uri "$baseUrl/api/health"
+Invoke-RestMethod -Method Get -Uri "$baseUrl/api/voices"
 ```
 
 Ambas deben dar 200. Si `/api/health` da 502, el backend no está corriendo
@@ -183,7 +188,7 @@ bucket y avisa por mail con SNS.
 
 | Riesgo | Defensa |
 | --- | --- |
-| Loop infinito (la Lambda escribe en el bucket que la dispara) | 1. Dos buckets separados. 2. Filtro por sufijo `.txt` en el trigger. 3. Guarda en el código (`should_process`). 4. Concurrencia [...] |
+| Loop infinito (la Lambda escribe en el bucket que la dispara) | Buckets separados, filtro `.txt` en el trigger, validación en código y límite de concurrencia |
 | Permisos excesivos | Rol con menor privilegio: lee `input`, escribe `output`, Polly y un topic SNS |
 | Secretos en el repo | Nada de keys: perfil de CLI y variables de entorno |
 | Costos | Alarma de billing + limpieza al final |
@@ -214,7 +219,7 @@ bucket y avisa por mail con SNS.
 
 1. **Motor con API oficial.** Las voces `es-AR-Elena` y `es-AR-Tomas` que usa
    la app son de Microsoft: **Azure Speech** las expone por API oficial (capa
-   gratuita mensual) y es el salto más directo desde `edge` sin perder calidad.
+gratis mensual) y es el salto más directo desde `edge` sin perder calidad.
    Amazon **Polly** es la opción si querés quedarte en AWS. `generative` de
    Polly y ElevenLabs suben la calidad y el precio.
 2. **Cache por hash.** Guardá el MP3 con clave `sha256(texto|voz|rate)`. En un
