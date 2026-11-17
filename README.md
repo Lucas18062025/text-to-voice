@@ -198,19 +198,44 @@ del Worker. Si pidiera token, Render marcaría el servicio como caído.
 El rate limit es por instancia y en memoria: frena abuso desde una IP, no
 reemplaza un WAF. El control que no depende de la IP es `TTS_MAX_CONCURRENT`.
 
+### Seguridad
+
+El backend es público por diseño (es una demo), pero acotado. Cada control
+tiene una verificación concreta:
+
+| Vector | Control | Cómo se comprueba |
+| --- | --- | --- |
+| Body gigante | Tope por `Content-Length` antes de parsear | `413` en ~200 ms, sin mencionar el tamaño del texto |
+| Ráfaga de síntesis | `TTS_MAX_CONCURRENT` | el request de más devuelve `429` + `Retry-After` |
+| Scraping por IP | `TTS_RATE_LIMIT_PER_MIN` | pasado el cupo, `429` |
+| Health check saturado | `/api/health` es `async` | responde en milisegundos con todos los slots ocupados |
+| Acceso directo al origen | `PROXY_TOKEN` (opcional) | `POST /api/tts` sin el header devuelve `403` |
+| Fuga de internals | `502` genérico y `/docs` apagado | sin `str(exc)` y sin Swagger público |
+
+La auditoría completa (código y superficie desplegada, con evidencia) está en
+`Portafolio/Auditorías/text-to-voice` del vault de Obsidian.
+
 ### Verificación
 
 Las siguientes solicitudes son solo de lectura (`GET`):
 
 ```powershell
 $baseUrl = 'https://text-to-voice.lucaslean1806.workers.dev'
-Invoke-RestMethod -Method Get -Uri "$baseUrl/api/health"
-Invoke-RestMethod -Method Get -Uri "$baseUrl/api/voices"
+$origin  = 'https://text-to-voice-api-ila7.onrender.com'
+
+Invoke-RestMethod -Method Get -Uri "$baseUrl/api/health"    # 200 status=ok
+Invoke-RestMethod -Method Get -Uri "$baseUrl/api/voices"    # 200, 19 voces
+(Invoke-WebRequest "$origin/docs" -SkipHttpErrorCheck).StatusCode   # 404
 ```
 
-Ambas deben dar 200. Si `/api/health` da **503**, el backend no responde
-(servicio dormido, túnel cerrado, `API_ORIGIN` viejo) o está en cold start: el
-cuerpo trae `code: upstream_timeout` o `upstream_unreachable`.
+Las dos primeras deben dar 200. Si `/api/health` da **503**, el backend no
+responde (servicio dormido, túnel cerrado, `API_ORIGIN` viejo) o está en cold
+start: el cuerpo trae `code: upstream_timeout` o `upstream_unreachable`.
+
+La tercera es el control de que el backend desplegado es el actual: **si
+`/docs` da 200, el origen quedó con código viejo** y hay que redesplegar
+(Render → **Manual Deploy** → **Deploy latest commit**). `autoDeploy` depende
+de cómo se creó el servicio; no siempre está activo.
 
 ### Otros hosts
 
@@ -295,7 +320,10 @@ gratis mensual) y es el salto más directo desde `edge` sin perder calidad.
 ```
 
 - `test_handler.py` — Lambda (S3/Polly/SNS mockeados).
-- `test_app.py` — API y validaciones (motor mockeado, sin red).
+- `test_app.py` — API y validaciones (motor mockeado, sin red), incluidos los
+  límites anti-abuso: body máximo (también en bodies chunked), concurrencia,
+  rate limit, token de proxy, `/docs` apagado y que el `502` no filtre el
+  detalle interno.
 
 Casos manuales de la Lambda:
 
