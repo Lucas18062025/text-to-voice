@@ -1,5 +1,6 @@
 # Texto a voz · `text-to-voice`
 
+**Deploy:** https://text-to-voice-api-ila7.onrender.com/ 
 Convertí texto en voz. Hoy hay dos caminos en el repo:
 
 | Modo | Qué hace | Cuándo usarlo |
@@ -7,7 +8,7 @@ Convertí texto en voz. Hoy hay dos caminos en el repo:
 | **Fase 1 — App local** | UI web: escribís, elegís voz (femenina/masculina), escuchás y bajás el MP3 | Demo, uso personal, validar la experiencia |
 | **Fase 2 — Serverless** | Subís un `.txt` a S3 y una Lambda lo convierte con Polly y avisa por SNS | Procesamiento por lotes en AWS |
 
-**Deploy:** https://text-to-voice-api-ila7.onrender.com/ — Worker en
+Worker en
 Cloudflare (UI + proxy) y la síntesis en Python detrás
 ([cómo está armado](#deploy-cloudflare-ui--proxy--backend-python)).
 
