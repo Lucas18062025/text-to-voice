@@ -102,7 +102,33 @@ versiona.
 
 Sitio: <https://text-to-voice.lucaslean1806.workers.dev>
 
-### Opción A — Túnel a tu PC (demo en vivo, $0, sin cuentas nuevas)
+### Modo actual — backend 24/7 en Render (free)
+
+```
+[Browser] -> Worker (assets + proxy /api/*) -> Render (FastAPI + edge-tts) -> Microsoft
+```
+
+Backend en producción: **<https://text-to-voice-api-ila7.onrender.com>**
+(servicio `text-to-voice-api`, Blueprint `text-to-voice` en Render).
+
+1. Render → **New** → **Blueprint** → repo `text-to-voice` (usa `render.yaml`).
+2. Copiar la URL del servicio. Render agrega un sufijo si el nombre está tomado.
+3. `.\deploy-cloudflare.ps1 -ApiOrigin https://<esa-url>`
+
+Así el sitio funciona sin depender de tu PC: verificado con el túnel y el
+backend local apagados (19 voces y un MP3 real salieron igual). El free tier
+duerme a los 15 min de inactividad y el primer request tarda ~40 s; el cron del
+Worker (`*/10 * * * *`) le pega a `/api/health` cada 10 minutos y lo mantiene
+despierto.
+
+> **Caveat honesto:** el cron cubre el letargo, no un cold start provocado por
+> una caída de Render. Si el servicio duerme igual, la primera visita puede
+> tardar ~40 s (la UI muestra el aviso de "no disponible" y alcanza con
+> reintentar).
+
+### Opción B — Túnel a tu PC (solo desarrollo local)
+
+Para probar cambios sin desplegar, o si no querés ningún host externo:
 
 ```powershell
 .\demo.ps1          # backend + túnel + deploy del Worker + verificación
@@ -122,19 +148,10 @@ sin instalador ni permisos de administrador).
 
 | Limitación | Detalle |
 | --- | --- |
-| La URL del túnel **cambia en cada arranque** | Por eso redeployar es parte del arranque |
-| La **PC tiene que quedar prendida** | Si se apaga o suspende, `/api/*` devuelve 502 |
-| Latencia | El MP3 viaja: Microsoft → tu PC → Cloudflare → navegador |
+| **No es 24/7** | Si el proceso `cloudflared` muere (PC apagada, suspensión, sesión cerrada), el hostname desaparece |
+| La URL **cambia en cada arranque** | Por eso redeployar es parte del arranque |
+| `/api/*` responde **503** con mensaje claro | El Worker traduce el `530 / 1016` de Cloudflare a JSON legible |
 | No es producción | Demo sin SLA, sin auth, con el endpoint no oficial de `edge` |
-
-### Opción B — Backend 24/7 en Render (free)
-
-1. render.com → **New** → **Blueprint** → repo `text-to-voice` (usa `render.yaml`).
-2. Copiar la URL que asigna, por ejemplo `https://text-to-voice-api.onrender.com`.
-3. `\.\deploy-cloudflare.ps1 -ApiOrigin https://<esa-url>`
-
-Free tier duerme a los 15 min de inactividad; el primer request tarda ~40 s.
-El cron del Worker (`*/10 * * * *`) lo mantiene despierto.
 
 ### Deploy del Worker
 
@@ -144,7 +161,7 @@ npx wrangler login      # una sola vez, abre el navegador
 ```
 
 El script pasa `API_ORIGIN` por CLI (`wrangler deploy --var API_ORIGIN:...`),
-así `wrangler.toml` queda con el valor vacío y la URL del túnel no ensucia el
+así `wrangler.toml` queda con el valor vacío y la URL del backend no ensucia el
 repo. Sin `API_ORIGIN`, `/api/*` responde un `500` con mensaje claro (en vez
 de colgarse 90 s y devolver un 502 opaco de Cloudflare).
 
@@ -158,8 +175,9 @@ Invoke-RestMethod -Method Get -Uri "$baseUrl/api/health"
 Invoke-RestMethod -Method Get -Uri "$baseUrl/api/voices"
 ```
 
-Ambas deben dar 200. Si `/api/health` da 502, el backend no está corriendo
-(túnel cerrado, PC dormida, `API_ORIGIN` viejo) o está en cold start.
+Ambas deben dar 200. Si `/api/health` da **503**, el backend no responde
+(servicio dormido, túnel cerrado, `API_ORIGIN` viejo) o está en cold start: el
+cuerpo trae `code: upstream_timeout` o `upstream_unreachable`.
 
 ### Otros hosts
 

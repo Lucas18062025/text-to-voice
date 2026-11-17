@@ -101,7 +101,7 @@ if ($Stop) {
         foreach ($s in $stopped) { Write-Host "Detenido: $s" -ForegroundColor Green }
     }
 
-    Write-Host 'El Worker sigue apuntando al tunel viejo: /api/* responde 502 hasta que corras .\demo.ps1 otra vez.' -ForegroundColor DarkGray
+    Write-Host 'Si el Worker apunta a este tunel, /api/* responde 503 hasta que lo repuntas (demo.ps1 o deploy-cloudflare.ps1 -ApiOrigin ...).' -ForegroundColor DarkGray
     exit 0
 }
 
