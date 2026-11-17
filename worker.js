@@ -2,8 +2,12 @@
  * Cloudflare Worker: sirve la UI (./web) y proxya /api/* al backend Python.
  *
  * Con el proxy la UI queda same-origin: no hace falta CORS ni cambiar
- * ninguna URL en el frontend. El backend se configura con la variable
- * API_ORIGIN (wrangler.toml [vars] o `wrangler secret put`).
+ * ninguna URL en el frontend.
+ *
+ * Variables:
+ *   API_ORIGIN   Origen del backend (wrangler.toml, con default real).
+ *   PROXY_TOKEN  Opcional. Si está seteado, se inyecta como X-Proxy-Token
+ *                para que el backend rechace a quien no pase por acá.
  */
 
 // Mensaje unico para cualquier caida del backend, para que el visitante
@@ -17,20 +21,31 @@ export default {
     if (url.pathname.startsWith("/api/")) {
       const origin = env.API_ORIGIN;
       if (!origin) {
+        // Sin detalle interno: el nombre de la variable no es informacion
+        // del visitante, y un 503 describe el problema mejor que un 500.
         return Response.json(
-          { detail: "API_ORIGIN no está configurado en el Worker." },
-          { status: 500 },
+          { detail: OFFLINE, code: "origin_not_configured" },
+          { status: 503 },
         );
       }
 
       const target = new URL(url.pathname + url.search, origin);
+
+      // Se reenvian las cabeceras del cliente salvo el token: si viniera
+      // del navegador, se descarta y se reemplaza por el del Worker.
+      const headers = new Headers(request.headers);
+      headers.delete("x-proxy-token");
+      if (env.PROXY_TOKEN) {
+        headers.set("x-proxy-token", env.PROXY_TOKEN);
+      }
+
       try {
         // 90 s: cubre el cold start de un free tier (~40-50 s).
         // Sin timeout, un origen inexistente cuelga hasta que Cloudflare
         // mata la invocación y devuelve un 502 genérico sin explicación.
         const upstream = await fetch(target.toString(), {
           method: request.method,
-          headers: request.headers,
+          headers,
           body:
             request.method === "GET" || request.method === "HEAD"
               ? undefined
