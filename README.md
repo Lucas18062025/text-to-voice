@@ -7,7 +7,7 @@ Convertí texto en voz. Hoy hay dos caminos en el repo:
 | **Fase 1 — App local** | UI web: escribís, elegís voz (femenina/masculina), escuchás y bajás el MP3 | Demo, uso personal, validar la experiencia |
 | **Fase 2 — Serverless** | Subís un `.txt` a S3 y una Lambda lo convierte con Polly y avisa por SNS | Procesamiento por lotes en AWS |
 
-**Deploy:** <https://text-to-voice.lucaslean1806.workers.dev> — Worker en
+**Deploy:** https://text-to-voice-api-ila7.onrender.com/ — Worker en
 Cloudflare (UI + proxy) y la síntesis en Python detrás
 ([cómo está armado](#deploy-cloudflare-ui--proxy--backend-python)).
 
