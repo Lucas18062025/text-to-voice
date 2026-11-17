@@ -1,5 +1,7 @@
 # Texto a voz · `text-to-voice`
 
+![Radio DJ hablando al micrófono](Radio_DJ_speaking_into_microphone_fbadaeea_2K.jpg)
+
 **Deploy:** https://text-to-voice-api-ila7.onrender.com/ 
 Convertí texto en voz. Hoy hay dos caminos en el repo:
 
@@ -12,7 +14,6 @@ Worker en
 Cloudflare (UI + proxy) y la síntesis en Python detrás
 ([cómo está armado](#deploy-cloudflare-ui--proxy--backend-python)).
 
-![Radio DJ hablando al micrófono](Radio_DJ_speaking_into_microphone_fbadaeea_2K.jpg)
 
 ---
 
