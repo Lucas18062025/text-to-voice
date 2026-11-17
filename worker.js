@@ -5,6 +5,11 @@
  * ninguna URL en el frontend. El backend se configura con la variable
  * API_ORIGIN (wrangler.toml [vars] o `wrangler secret put`).
  */
+
+// Mensaje unico para cualquier caida del backend, para que el visitante
+// no vea "Error 530" ni detalles de infraestructura.
+const OFFLINE =
+  "El servicio de voz no está disponible en este momento.";
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -23,7 +28,7 @@ export default {
         // 90 s: cubre el cold start de un free tier (~40-50 s).
         // Sin timeout, un origen inexistente cuelga hasta que Cloudflare
         // mata la invocación y devuelve un 502 genérico sin explicación.
-        return await fetch(target.toString(), {
+        const upstream = await fetch(target.toString(), {
           method: request.method,
           headers: request.headers,
           body:
@@ -32,18 +37,32 @@ export default {
               : request.body,
           signal: AbortSignal.timeout(90000),
         });
+
+        // Un túnel caído no "falla" desde el punto de vista del Worker:
+        // Cloudflare responde 530 con una página HTML (error 1016). Si la
+        // dejamos pasar, la UI muestra "Error 530". La traducimos a JSON.
+        if (upstream.status >= 500) {
+          const type = upstream.headers.get("content-type") || "";
+          if (!type.includes("application/json")) {
+            return Response.json(
+              { detail: OFFLINE, upstream_status: upstream.status },
+              { status: 503 },
+            );
+          }
+        }
+
+        return upstream;
       } catch (error) {
         const timedOut =
           error?.name === "TimeoutError" || error?.name === "AbortError";
         return Response.json(
           {
             detail: timedOut
-              ? `El backend en ${origin} no respondió en 90 s. ` +
-                "Si está en free tier puede estar arrancando: reintentá en ~40 s. " +
-                "Si nunca responde, API_ORIGIN apunta a un host inexistente."
-              : `No pude contactar el backend en ${origin}: ${String(error)}`,
+              ? `${OFFLINE} Si el backend estaba arrancando, esperá ~40 s y reintentá.`
+              : OFFLINE,
+            code: timedOut ? "upstream_timeout" : "upstream_unreachable",
           },
-          { status: 502 },
+          { status: 503 },
         );
       }
     }

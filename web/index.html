@@ -228,6 +228,9 @@
       if (typeof body.detail === "string") return body.detail;
       if (Array.isArray(body.detail)) return body.detail.map((d) => d.msg).join("; ");
     } catch { /* respuesta sin JSON */ }
+    if (response.status >= 500) {
+      return "El servicio de voz no está disponible en este momento. Reintentá en unos segundos.";
+    }
     return `Error ${response.status}`;
   };
 
