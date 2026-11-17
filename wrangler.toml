@@ -8,12 +8,16 @@ directory = "./web"
 binding = "ASSETS"
 
 # Backend Python que ejecuta la sintesis (edge-tts): Render, Fly, Koyeb
-# o un tunel de cloudflared. Vacio = el Worker responde un 500 con mensaje
-# claro en /api/* en vez de colgarse esperando un host inexistente.
-# Se setea al deployar, sin modificar este archivo:
-#   .\deploy-cloudflare.ps1 -ApiOrigin https://tu-backend
+# o un tunel de cloudflared.
+#
+# El default es el backend de produccion, para que `wrangler deploy` a
+# secas NO deje el Worker sin origen (sintoma anterior: 503 en todo /api/*).
+# Se puede pisar sin tocar el archivo:
+#   .\deploy-cloudflare.ps1 -ApiOrigin https://otro-backend
+#
+# API_ORIGIN es una URL publica, no un secreto: va en el repo a proposito.
 [vars]
-API_ORIGIN = ""
+API_ORIGIN = "https://text-to-voice-api-ila7.onrender.com"
 
 # Mantiene despierto el backend de free tier.
 [triggers]

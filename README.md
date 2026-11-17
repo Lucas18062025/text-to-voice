@@ -84,8 +84,10 @@ $env:TTS_PROVIDER = "polly"   # cambia el motor activo
 | `GET` | `/api/voices` | Voces del motor activo (con `gender`, `locale`, `country`) |
 | `POST` | `/api/tts` | `{text, voice, rate}` → `audio/mpeg` |
 
-Errores: `400` texto vacío o voz inválida, `413` texto demasiado largo
-(>3000 caracteres), `422` velocidad fuera de rango, `502` falla del motor.
+Errores: `400` texto vacío o voz inválida, `403` falta el `X-Proxy-Token`
+cuando está configurado, `413` texto demasiado largo (>3000 caracteres) o
+cuerpo mayor al tope, `422` velocidad fuera de rango, `429` límite de
+frecuencia o de síntesis simultáneas, `502` falla del motor.
 
 ---
 
@@ -97,8 +99,8 @@ Errores: `400` texto vacío o voz inválida, `413` texto demasiado largo
 
 El Worker **no ejecuta Python**: sirve `web/` como assets y reenvía `/api/*`
 al backend. Como todo pasa por el mismo origen, la UI no cambia y no hace
-falta CORS. La URL del backend es `API_ORIGIN`, y se pasa al deployar: no se
-versiona.
+falta CORS. La URL del backend es `API_ORIGIN` (en `wrangler.toml`, con el
+valor de producción por defecto); es una URL pública, no un secreto.
 
 Sitio: <https://text-to-voice.lucaslean1806.workers.dev>
 
@@ -157,13 +159,44 @@ sin instalador ni permisos de administrador).
 
 ```powershell
 npx wrangler login      # una sola vez, abre el navegador
-.\deploy-cloudflare.ps1 -ApiOrigin https://<backend>
+.\deploy-cloudflare.ps1
 ```
 
-El script pasa `API_ORIGIN` por CLI (`wrangler deploy --var API_ORIGIN:...`),
-así `wrangler.toml` queda con el valor vacío y la URL del backend no ensucia el
-repo. Sin `API_ORIGIN`, `/api/*` responde un `500` con mensaje claro (en vez
-de colgarse 90 s y devolver un 502 opaco de Cloudflare).
+`API_ORIGIN` tiene el backend de producción como default en `wrangler.toml`,
+así que **un deploy a secas funciona**. Para apuntar a otro backend:
+
+```powershell
+.\deploy-cloudflare.ps1 -ApiOrigin https://<otro-backend>
+```
+
+El script ya no termina en el deploy: verifica el origen antes de publicar y
+hace un smoke test real después (`/api/health`, `/api/voices` y una síntesis
+de punta a punta). Si cualquiera falla, termina con error. Un deploy sin
+verificación fue exactamente lo que dejó el sitio en 503.
+
+### Límites y defensas
+
+Todo se configura por entorno, con defaults seguros. No hace falta tocar
+código para ajustarlos.
+
+| Variable | Default | Qué hace |
+| --- | --- | --- |
+| `TTS_MAX_BODY_BYTES` | `32768` | Corta el request por `Content-Length` antes de parsear. Alcanza para 3000 caracteres con el peor escape JSON |
+| `TTS_MAX_CONCURRENT` | `4` | Síntesis simultáneas. Pasado el tope responde `429` en vez de encolar |
+| `TTS_RATE_LIMIT_PER_MIN` | `60` | Peticiones por cliente y minuto (`0` desactiva) |
+| `TTS_DOCS` | apagado | `1` publica `/docs`, `/redoc` y `/openapi.json` |
+| `PROXY_TOKEN` | vacío | Si está seteado, `POST /api/tts` exige `X-Proxy-Token`. El Worker lo inyecta solo |
+
+Con `PROXY_TOKEN` configurado en Render **y** en el Worker, el backend deja de
+ser un relay público: quien le pegue directo al origen recibe `403`. Es
+opcional a propósito — si se setea en un solo lado, la síntesis se rompe, así
+que se activa en los dos o en ninguno.
+
+`/api/health` nunca pide token: lo usan el health check de Render y el cron
+del Worker. Si pidiera token, Render marcaría el servicio como caído.
+
+El rate limit es por instancia y en memoria: frena abuso desde una IP, no
+reemplaza un WAF. El control que no depende de la IP es `TTS_MAX_CONCURRENT`.
 
 ### Verificación
 
